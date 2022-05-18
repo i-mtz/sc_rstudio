@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+#
+# Load modules
+#
+
+# Purge the module environment to avoid conflicts
+module reset
+
+# Load the rstudio module (required)
+module load RStudio-Server/2021.09.3-396-foss-2021a-Java-11
+
+# Load the requested R module (required)
+module load <%= context.sc_r_version %>
+
+<%- unless context.sc_modules.blank? -%>
+# Load additional modules (optional)
+module load <%= context.sc_modules %>
+<%- end -%>
+
+
+#
+# Start RStudio Server
+#
+
+# PAM auth helper used by RStudio
+export RSTUDIO_AUTH="${PWD}/bin/auth"
+
+export RSTUDIO_DB_PATH="${PWD}"
+export RSTUDIO_DB_CONF="${PWD}/rstudio.db"
+echo "provider=sqlite" > ${RSTUDIO_DB_CONF}
+echo "directory=${RSTUDIO_DB_PATH}" >> ${RSTUDIO_DB_CONF}
+
+# Generate an `rsession` wrapper script
+export RSESSION_WRAPPER_FILE="${PWD}/rsession.sh"
+(
+umask 077
+sed 's/^ \{2\}//' > "${RSESSION_WRAPPER_FILE}" << EOL
+  #!/usr/bin/env bash
+
+  # Log all output from this script
+  export RSESSION_LOG_FILE="${PWD}/rsession.log"
+  exec &>>"\${RSESSION_LOG_FILE}"
+
+  # Launch the original command
+  echo "Launching rsession..."
+  set -x
+  exec rsession --r-libs-user "${R_LIBS_USER}" "\${@}"
+EOL
+)
+chmod 700 "${RSESSION_WRAPPER_FILE}"
+
+# Set working directory to home directory
+cd "${HOME}"
+
+# Launch the RStudio Server
+echo "Starting up rserver..."
+set -x
+
+rserver \
+  --www-port ${port} \
+  --auth-none 0 \
+  --auth-encrypt-password 0 \
+  --auth-timeout-minutes 0 \
+  --www-frame-origin=same \
+  --server-user ${USER} \
+  --auth-pam-helper-path "${RSTUDIO_AUTH}" \
+  --database-config-file "${RSTUDIO_DB_CONF}" \
+  --rsession-path "${RSESSION_WRAPPER_FILE}" \
+  --server-data-dir "${TMPDIR}"  2>&1

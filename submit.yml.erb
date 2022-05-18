@@ -1,0 +1,21 @@
+batch_connect:
+  template: "basic"
+
+  conn_params:
+    - csrf_token
+
+script:
+  native: [
+            "-c", "<%= sc_cpus.blank?  ? 1 : sc_cpus.to_i %>",
+            <%- if not sc_gpus.blank? -%>
+                "-G", "<%= sc_gpus.to_i %>",
+            <%- end -%>
+            <%- if not sc_mem.blank? -%>
+                "--mem", "<%= sc_mem.to_i %>G",
+            <%- end -%>
+            <%- if not bc_reservation.blank? -%>
+                "--reservation", "<%= bc_reservation %>"
+            <%- end -%>
+          ]
+  queue_name: <%= sc_partition.blank? ? "scicore" : sc_partition.strip %>
+
